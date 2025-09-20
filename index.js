@@ -2,10 +2,15 @@ const express = require('express');
 const cors = require('cors');
 const mysql = require('mysql2');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 app.use(express.json());
 app.use(cors());
+
+// JWT Secret
+const JWT_SECRET = 'your_super_secret_key';
+const JWT_EXPIRES_IN = '1h';
 
 // MySQL connection
 const connection = mysql.createConnection({
@@ -23,38 +28,41 @@ connection.connect((err) => {
   console.log('Connected to MySQL database');
 });
 
-// Utility: hash password
+// Utility functions
 async function hashData(data) {
-  try {
-    return await bcrypt.hash(data, 10);
-  } catch (err) {
-    console.log('Hashing error:', err);
-  }
+  return await bcrypt.hash(data, 10);
 }
 
-// Utility: compare password
 async function compareHash(data, hash) {
-  try {
-    return await bcrypt.compare(data, hash);
-  } catch (err) {
-    console.log('Compare hash error:', err);
-  }
+  return await bcrypt.compare(data, hash);
 }
 
-// Get all users
-app.get('/users', (req, res) => {
-  connection.query('SELECT id, username, email FROM `user`', (err, results) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(results);
-  });
-});
+function generateToken(user) {
+  return jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+}
 
-// Register user
+// JWT Middleware
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return res.status(401).json({ message: 'Access denied. No token provided' });
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ message: 'Invalid token' });
+    req.user = user;
+    next();
+  });
+}
+
+// Routes
+
+// Root
+app.get('/', (req, res) => res.send('API is working'));
+
+// Register
 app.post('/register', async (req, res) => {
   const { username, email, password } = req.body;
-  if (!username || !email || !password) {
-    return res.status(400).json({ message: 'All fields are required' });
-  }
+  if (!username || !email || !password) return res.status(400).json({ message: 'All fields are required' });
 
   const hashedPassword = await hashData(password);
 
@@ -63,9 +71,7 @@ app.post('/register', async (req, res) => {
     [username, email, hashedPassword],
     (err, results) => {
       if (err) {
-        if (err.code === 'ER_DUP_ENTRY') {
-          return res.status(400).json({ message: 'Email already exists' });
-        }
+        if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ message: 'Email already exists' });
         return res.status(500).json({ error: err.message });
       }
       res.json({ message: 'User registered successfully', userId: results.insertId });
@@ -73,12 +79,10 @@ app.post('/register', async (req, res) => {
   );
 });
 
-// Login user
+// Login
 app.post('/login', (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ message: 'Email and password required' });
-  }
+  if (!email || !password) return res.status(400).json({ message: 'Email and password required' });
 
   connection.query('SELECT * FROM `user` WHERE email = ?', [email], async (err, results) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -88,16 +92,18 @@ app.post('/login', (req, res) => {
     const match = await compareHash(password, user.password);
     if (!match) return res.status(400).json({ message: 'Incorrect password' });
 
-    res.json({ message: 'Login successful', user: { id: user.id, username: user.username, email: user.email } });
+    const token = generateToken(user);
+    res.json({ message: 'Login successful', token });
   });
 });
 
-// Root
-app.get('/', (req, res) => {
-  res.send('API is working');
+// Protected route: Get all users
+app.get('/users', authenticateToken, (req, res) => {
+  connection.query('SELECT id, username, email FROM `user`', (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(results);
+  });
 });
 
-// Start server
-app.listen(3000, () => {
-  console.log('Server up and running on port 3000');
-});
+// Server
+app.listen(3000, () => console.log('Server running on port 3000'));
