@@ -55,7 +55,6 @@ function insertData(email, pass){
 app.get('/',(req,res)=>{
     const {email, password} = req.body;
     res.send('api working')
-    console.log(findUser(email))
     
 })
 app.listen(3000,()=>{
