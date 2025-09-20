@@ -2,7 +2,7 @@ const express = require('express');
 const app = express();
 
 app.get('/', (req,res)=>{
-	res.send('Api working betterr')
+	res.send('Api working better')
 })
 
 app.listen(3000, ()=>{
