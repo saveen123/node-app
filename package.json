@@ -16,5 +16,11 @@
   "bugs": {
     "url": "https://github.com/saveen123/node-app/issues"
   },
-  "homepage": "https://github.com/saveen123/node-app#readme"
+  "homepage": "https://github.com/saveen123/node-app#readme",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "mysql2": "^3.15.0"
+  }
 }
